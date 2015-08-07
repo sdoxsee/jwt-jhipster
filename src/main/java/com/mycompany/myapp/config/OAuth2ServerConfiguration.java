@@ -1,14 +1,18 @@
 package com.mycompany.myapp.config;
 
+import java.security.KeyPair;
+
 import com.mycompany.myapp.security.AjaxLogoutSuccessHandler;
 import com.mycompany.myapp.security.AuthoritiesConstants;
 import com.mycompany.myapp.security.Http401UnauthorizedEntryPoint;
+
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.bind.RelaxedPropertyResolver;
 import org.springframework.context.EnvironmentAware;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -18,8 +22,12 @@ import org.springframework.security.oauth2.config.annotation.web.configuration.E
 import org.springframework.security.oauth2.config.annotation.web.configuration.EnableResourceServer;
 import org.springframework.security.oauth2.config.annotation.web.configuration.ResourceServerConfigurerAdapter;
 import org.springframework.security.oauth2.config.annotation.web.configurers.AuthorizationServerEndpointsConfigurer;
+import org.springframework.security.oauth2.provider.token.DefaultAccessTokenConverter;
 import org.springframework.security.oauth2.provider.token.TokenStore;
 import org.springframework.security.oauth2.provider.token.store.JdbcTokenStore;
+import org.springframework.security.oauth2.provider.token.store.JwtAccessTokenConverter;
+import org.springframework.security.oauth2.provider.token.store.JwtTokenStore;
+import org.springframework.security.oauth2.provider.token.store.KeyStoreKeyFactory;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 import javax.inject.Inject;
@@ -90,12 +98,20 @@ public class OAuth2ServerConfiguration {
 
         private RelaxedPropertyResolver propertyResolver;
 
-        @Inject
-        private DataSource dataSource;
-
+		@Bean
+		public JwtAccessTokenConverter jwtAccessTokenConverter() {
+			JwtAccessTokenConverter converter = new JwtAccessTokenConverter();
+			// SHA256withRSA http://docs.oracle.com/javase/7/docs/technotes/tools/solaris/keytool.html
+			KeyPair keyPair = new KeyStoreKeyFactory(
+					new ClassPathResource("keystore.jks"), "foobar".toCharArray())
+					.getKeyPair("test");
+			converter.setKeyPair(keyPair);
+			return converter;
+		}
+        
         @Bean
         public TokenStore tokenStore() {
-            return new JdbcTokenStore(dataSource);
+            return new JwtTokenStore(jwtAccessTokenConverter());
         }
 
         @Inject
@@ -105,10 +121,8 @@ public class OAuth2ServerConfiguration {
         @Override
         public void configure(AuthorizationServerEndpointsConfigurer endpoints)
                 throws Exception {
-
-            endpoints
-                    .tokenStore(tokenStore())
-                    .authenticationManager(authenticationManager);
+        	endpoints.authenticationManager(authenticationManager).accessTokenConverter(
+					jwtAccessTokenConverter());
         }
 
         @Override
